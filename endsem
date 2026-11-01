@@ -1,0 +1,2798 @@
+Practical 1: To implement and demonstrate Inter-Process Communication (IPC) in Python using Pipes, Sockets, and Shared Memory.
+
+Code(in python):
+import multiprocessing as mp
+import socket
+import time
+from multiprocessing import shared_memory
+
+
+# 1. IPC USING PIPES
+def pipe_child(conn):
+    msg = conn.recv()
+    print(f"[Pipe-Child] Received from parent: {msg}")
+    conn.send(f"Hello Parent, I got your message: '{msg}'")
+    conn.close()
+
+
+def demo_pipes():
+    print("\n===== 1. PIPE-BASED IPC (multiprocessing.Pipe) =====")
+
+    parent_conn, child_conn = mp.Pipe(duplex=True)
+
+    p = mp.Process(target=pipe_child, args=(child_conn,))
+    p.start()
+
+    parent_conn.send("Hello Child, are you there?")
+    reply = parent_conn.recv()
+
+    print(f"[Pipe-Parent] Received from child: {reply}")
+
+    p.join()
+    parent_conn.close()
+
+
+# 2. IPC USING SOCKETS
+def socket_server(host, port, ready_event):
+    server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server_sock.bind((host, port))
+    server_sock.listen(1)
+
+    ready_event.set()
+
+    conn, addr = server_sock.accept()
+    data = conn.recv(1024).decode()
+
+    print(f"[Socket-Server] Received from client {addr}: {data}")
+
+    conn.sendall(f"Server acknowledges: '{data}'".encode())
+
+    conn.close()
+    server_sock.close()
+
+
+def socket_client(host, port, ready_event):
+    ready_event.wait()
+    time.sleep(0.2)
+
+    client_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client_sock.connect((host, port))
+
+    client_sock.sendall("Hello Server, this is the client!".encode())
+
+    response = client_sock.recv(1024).decode()
+
+    print(f"[Socket-Client] Received from server: {response}")
+
+    client_sock.close()
+
+
+def demo_sockets():
+    print("\n===== 2. SOCKET-BASED IPC (TCP, localhost) =====")
+
+    host, port = "127.0.0.1", 65432
+    ready_event = mp.Event()
+
+    server = mp.Process(
+        target=socket_server,
+        args=(host, port, ready_event)
+    )
+
+    client = mp.Process(
+        target=socket_client,
+        args=(host, port, ready_event)
+    )
+
+    server.start()
+    client.start()
+
+    server.join()
+    client.join()
+
+
+# 3. IPC USING SHARED MEMORY
+def shared_memory_writer(shm_name, size):
+    shm = shared_memory.SharedMemory(name=shm_name)
+
+    message = b"Data written directly into shared memory!"
+    shm.buf[:len(message)] = message
+
+    print(f"[SharedMem-Writer] Wrote {len(message)} bytes into shared memory.")
+
+    shm.close()
+
+
+def shared_memory_reader(shm_name, size, done_event):
+    done_event.wait()
+
+    shm = shared_memory.SharedMemory(name=shm_name)
+
+    data = bytes(shm.buf[:size]).rstrip(b"\x00")
+
+    print(f"[SharedMem-Reader] Read from shared memory: {data.decode()}")
+
+    shm.close()
+
+
+def demo_shared_memory():
+    print("\n===== 3. SHARED MEMORY IPC (multiprocessing.shared_memory) =====")
+
+    size = 128
+    shm = shared_memory.SharedMemory(create=True, size=size)
+    done_event = mp.Event()
+
+    writer = mp.Process(
+        target=shared_memory_writer,
+        args=(shm.name, size)
+    )
+
+    reader = mp.Process(
+        target=shared_memory_reader,
+        args=(shm.name, size, done_event)
+    )
+
+    reader.start()
+    writer.start()
+
+    writer.join()
+    done_event.set()
+    reader.join()
+
+    shm.close()
+    shm.unlink()
+
+
+# MAIN DRIVER
+if __name__ == "__main__":
+    print("=====================================================")
+    print(" IPC PRACTICAL: PIPES | SOCKETS | SHARED MEMORY ")
+    print("=====================================================")
+
+    demo_pipes()
+    demo_sockets()
+    demo_shared_memory()
+
+    print("\nAll three IPC demonstrations completed successfully.")
+
+Name it: ipc_practical.py
+Cmd: python ipc_practical.py
+
+Practical 2: To implement and demonstrate Remote Procedure Call (RPC) and Remote Method Invocation (RMI) in Python using XML-RPC, allowing a client program to remotely perform arithmetic operations on a server. 
+
+RPC (Function-based) : rpc_server.py 
+
+from xmlrpc.server import SimpleXMLRPCServer
+
+
+# Arithmetic functions
+def add(a, b):
+    return a + b
+
+
+def subtract(a, b):
+    return a - b
+
+
+def multiply(a, b):
+    return a * b
+
+
+def divide(a, b):
+    if b == 0:
+        return "Division by zero is not allowed."
+    return a / b
+
+
+# Server configuration
+HOST = "0.0.0.0"
+PORT = 8000
+
+server = SimpleXMLRPCServer((HOST, PORT), allow_none=True)
+
+print(f"RPC Server running on {HOST}:{PORT}")
+
+# Register functions so clients can call them
+server.register_function(add, "add")
+server.register_function(subtract, "subtract")
+server.register_function(multiply, "multiply")
+server.register_function(divide, "divide")
+
+# Keep the server running
+server.serve_forever()
+
+rpc_client.py 
+
+import xmlrpc.client
+
+
+# Server address
+SERVER_IP = "127.0.0.1"
+PORT = 8000
+
+# Create a proxy to communicate with the server
+proxy = xmlrpc.client.ServerProxy(
+    f"http://{SERVER_IP}:{PORT}/"
+)
+
+# Call remote functions
+print("Addition:", proxy.add(20, 10))
+print("Subtraction:", proxy.subtract(20, 10))
+print("Multiplication:", proxy.multiply(20, 10))
+print("Division:", proxy.divide(20, 10))
+
+Cmd 1: cd C:\Users\mendo
+python rpc_server.py
+Cmd 2: cd C:\Users\mendo
+python rpc_client.py
+
+RMI (Object-based)  : rmi_server.py 
+from xmlrpc.server import SimpleXMLRPCServer
+
+
+# Calculator class
+class Calculator:
+
+    def add(self, a, b):
+        return a + b
+
+    def subtract(self, a, b):
+        return a - b
+
+    def multiply(self, a, b):
+        return a * b
+
+    def divide(self, a, b):
+        if b == 0:
+            return "Division by zero is not allowed."
+        return a / b
+
+
+# Server configuration
+HOST = "0.0.0.0"
+PORT = 9000
+
+server = SimpleXMLRPCServer((HOST, PORT), allow_none=True)
+
+print(f"RMI Server running on {HOST}:{PORT}")
+
+# Register the Calculator object
+server.register_instance(Calculator())
+
+# Keep the server running
+server.serve_forever()
+
+rmi_client.py 
+import xmlrpc.client
+
+
+# Server address
+SERVER_IP = "127.0.0.1"
+PORT = 9000
+
+# Create a proxy to communicate with the Calculator object
+calculator = xmlrpc.client.ServerProxy(
+    f"http://{SERVER_IP}:{PORT}/"
+)
+
+# Invoke remote methods
+print("Addition:", calculator.add(5, 10))
+print("Subtraction:", calculator.subtract(15, 5))
+print("Multiplication:", calculator.multiply(6, 8))
+print("Division:", calculator.divide(100, 20))
+
+Cmd 1: cd C:\Users\mendo
+python rmi_server.py
+Cmd 2: cd C:\Users\mendo
+python rmi_client.py
+
+Practical 3: To implement and demonstrate Vector Clocks in a distributed system to maintain the logical ordering of events among multiple processes. 
+
+# Practical 3: Vector Clocks
+
+# Number of processes
+N = 3
+
+# Initial vector clocks
+P1 = [0, 0, 0]
+P2 = [0, 0, 0]
+P3 = [0, 0, 0]
+
+print("Initial Clocks")
+print("P1:", P1)
+print("P2:", P2)
+print("P3:", P3)
+
+
+# Event 1: Internal event in Process 1
+P1[0] += 1
+
+print("\n--- Event 1 ---")
+print("Process 1 Internal Event :", P1)
+
+
+# Event 2: Process 1 sends a message
+P1[0] += 1
+
+# Attach the current vector clock to the message
+message = P1.copy()
+
+print("\n--- Event 2 ---")
+print("Process 1 Sent Message :", message)
+
+
+# Event 3: Internal event in Process 2
+P2[1] += 1
+
+print("\n--- Event 3 ---")
+print("Process 2 Internal Event :", P2)
+
+
+# Event 4: Process 2 receives the message
+# Merge the received clock with the local clock
+for i in range(N):
+    P2[i] = max(P2[i], message[i])
+
+# Increment Process 2's own clock
+P2[1] += 1
+
+print("\n--- Event 4 ---")
+print("Process 2 Received Message :", P2)
+
+
+# Event 5: Internal event in Process 3
+P3[2] += 1
+
+print("\n--- Event 5 ---")
+print("Process 3 Internal Event :", P3)
+
+
+# Display final vector clocks
+print("\nFinal Vector Clocks")
+print("P1:", P1)
+print("P2:", P2)
+print("P3:", P3)
+
+Cmd: python vector_clock.py
+
+Practical 4: To implement and demonstrate the Ricart–Agrawala distributed mutual exclusion algorithm using Python, ensuring that only one process enters the Critical Section at a time. 
+
+File name: ricart_agrawala.py
+
+Code: 
+class Process:
+
+    def __init__(self, pid, total_processes):
+        self.pid = pid
+        self.total_processes = total_processes
+
+        self.clock = 0
+        self.state = "RELEASED"
+
+        self.request_timestamp = None
+        self.replies_received = set()
+        self.deferred_requests = []
+
+    # Request Critical Section
+    def request_critical_section(self, processes):
+
+        self.clock += 1
+
+        self.request_timestamp = self.clock
+        self.state = "WANTED"
+
+        self.replies_received = set()
+
+        print(f"\nP{self.pid}: Requesting Critical Section")
+        print(f"P{self.pid}: Timestamp = {self.request_timestamp}")
+
+        # Send REQUEST to all other processes
+        for process in processes:
+
+            if process.pid != self.pid:
+
+                process.receive_request(
+                    self.pid,
+                    self.request_timestamp,
+                    self
+                )
+
+    # Receive REQUEST
+    def receive_request(
+        self,
+        sender_pid,
+        sender_timestamp,
+        sender_process
+    ):
+
+        # Update logical clock
+        self.clock = max(
+            self.clock,
+            sender_timestamp
+        ) + 1
+
+        print(
+            f"P{self.pid}: Received REQUEST from "
+            f"P{sender_pid}"
+        )
+
+        send_reply = False
+
+        # CASE 1: Process is RELEASED
+        if self.state == "RELEASED":
+
+            send_reply = True
+
+        # CASE 2: Process is WANTED
+        elif self.state == "WANTED":
+
+            my_request = (
+                self.request_timestamp,
+                self.pid
+            )
+
+            sender_request = (
+                sender_timestamp,
+                sender_pid
+            )
+
+            # Smaller timestamp gets priority
+            if sender_request < my_request:
+
+                send_reply = True
+
+        # CASE 3: Process is HELD
+        elif self.state == "HELD":
+
+            send_reply = False
+
+        # Send or defer REPLY
+        if send_reply:
+
+            print(
+                f"P{self.pid}: Sending REPLY to "
+                f"P{sender_pid}"
+            )
+
+            sender_process.receive_reply(self.pid)
+
+        else:
+
+            print(
+                f"P{self.pid}: Deferring REQUEST from "
+                f"P{sender_pid}"
+            )
+
+            self.deferred_requests.append(sender_process)
+
+    # Receive REPLY
+    def receive_reply(self, sender_pid):
+
+        self.replies_received.add(sender_pid)
+
+        print(
+            f"P{self.pid}: Received REPLY from "
+            f"P{sender_pid}"
+        )
+
+        # Enter CS only after receiving REPLY
+        # from all other processes
+
+        if (
+            self.state == "WANTED"
+            and len(self.replies_received)
+            == self.total_processes - 1
+        ):
+
+            self.enter_critical_section()
+
+    # Enter Critical Section
+    def enter_critical_section(self):
+
+        self.state = "HELD"
+
+        print(
+            f"\n>>> P{self.pid} ENTERED "
+            f"CRITICAL SECTION <<<"
+        )
+
+        print(
+            f"P{self.pid}: Performing critical work..."
+        )
+
+        self.exit_critical_section()
+
+    # Exit Critical Section
+    def exit_critical_section(self):
+
+        print(
+            f">>> P{self.pid} EXITED "
+            f"CRITICAL SECTION <<<\n"
+        )
+
+        self.state = "RELEASED"
+        self.request_timestamp = None
+
+        # Send REPLY to deferred processes
+        for process in self.deferred_requests:
+
+            print(
+                f"P{self.pid}: Sending deferred "
+                f"REPLY to P{process.pid}"
+            )
+
+            process.receive_reply(self.pid)
+
+        # Clear deferred requests
+        self.deferred_requests.clear()
+
+
+# CREATE PROCESSES
+
+p1 = Process(1, 3)
+p2 = Process(2, 3)
+p3 = Process(3, 3)
+
+processes = [p1, p2, p3]
+
+
+# REQUEST CRITICAL SECTION
+
+p1.request_critical_section(processes)
+
+p2.request_critical_section(processes)
+
+p3.request_critical_section(processes)
+
+Terminal: python ricart_agrawala.py
+
+ Bully algorithm: 
+# Bully Algorithm for Leader Election
+
+class Process:
+    def __init__(self, process_id, all_processes):
+        self.process_id = process_id
+        self.all_processes = all_processes
+        self.active = True
+        self.coordinator = None
+
+    def send_request(self):
+        print(f"\nP{self.process_id} -> P{self.coordinator}: REQUEST")
+
+        coordinator_process = self.all_processes[self.coordinator]
+
+        if coordinator_process.active:
+            print(f"P{self.coordinator} -> P{self.process_id}: ALIVE")
+            print("Coordinator is alive. No election required.")
+        else:
+            print("No response received.")
+            print("TIMEOUT: Coordinator has failed.")
+            self.start_election()
+
+    def start_election(self):
+        print(f"\nP{self.process_id} starts an election.")
+
+        higher_processes = [
+            p for p in self.all_processes.values()
+            if p.process_id > self.process_id and p.active
+        ]
+
+        if not higher_processes:
+            self.become_coordinator()
+            return
+
+        for process in higher_processes:
+            print(
+                f"P{self.process_id} -> "
+                f"P{process.process_id}: ELECTION"
+            )
+            print(
+                f"P{process.process_id} -> "
+                f"P{self.process_id}: ALIVE"
+            )
+
+        # The highest active process continues the election.
+        highest_process = max(
+            higher_processes,
+            key=lambda p: p.process_id
+        )
+
+        highest_process.start_election()
+
+    def become_coordinator(self):
+        self.coordinator = self.process_id
+
+        print(
+            f"\nP{self.process_id} becomes the NEW COORDINATOR."
+        )
+
+        for process in self.all_processes.values():
+            if process.active and process.process_id != self.process_id:
+                process.coordinator = self.process_id
+                print(
+                    f"P{self.process_id} -> "
+                    f"P{process.process_id}: COORDINATOR"
+                )
+
+
+# Create five processes: P1, P2, P3, P4, P5
+processes = {}
+
+for i in range(1, 6):
+    processes[i] = Process(i, processes)
+
+# Initially, P5 is the coordinator
+for process in processes.values():
+    process.coordinator = 5
+
+print("Initial Coordinator: P5")
+
+# Simulate failure of P5
+processes[5].active = False
+print("\nP5 has failed!")
+
+# P2 detects the failure and starts the election
+processes[2].send_request()
+
+Cmd: python bully_algorithm.py
+
+Practical 5: To implement Distributed Shared Memory using Python multiprocessing, allowing multiple processes to read and write shared data safely using a shared dictionary and lock. 
+
+import multiprocessing
+import time
+import random
+
+
+class DistributedSharedMemory:
+
+    def __init__(self, manager):
+        self.memory = manager.dict()
+        self.lock = multiprocessing.Lock()
+
+    def write(self, key, value, process_id):
+
+        with self.lock:
+            print(
+                f"\nProcess {process_id}: "
+                f"Writing {value} to '{key}'",
+                flush=True
+            )
+
+            self.memory[key] = value
+            time.sleep(0.5)
+
+    def read(self, key, process_id):
+
+        with self.lock:
+            value = self.memory.get(key, None)
+
+            print(
+                f"\nProcess {process_id}: "
+                f"Read '{key}' = {value}",
+                flush=True
+            )
+
+            return value
+
+
+def process_task(process_id, memory, lock):
+
+    print(f"\nProcess {process_id} started", flush=True)
+
+    value = random.randint(1, 100)
+
+    # Write to shared memory
+    with lock:
+        print(
+            f"\nProcess {process_id}: "
+            f"Writing {value} to 'shared_data'",
+            flush=True
+        )
+
+        memory["shared_data"] = value
+        time.sleep(0.5)
+
+    # Wait for a random duration
+    time.sleep(random.uniform(0.1, 1))
+
+    # Read from shared memory
+    with lock:
+        value = memory.get("shared_data", None)
+
+        print(
+            f"\nProcess {process_id}: "
+            f"Read 'shared_data' = {value}",
+            flush=True
+        )
+
+    print(f"\nProcess {process_id} finished", flush=True)
+
+
+if __name__ == "__main__":
+
+    # Create the Manager in the main process
+    manager = multiprocessing.Manager()
+
+    # Create shared dictionary and lock
+    dsm = DistributedSharedMemory(manager)
+
+    processes = []
+
+    # Start three processes
+    for i in range(1, 4):
+
+        p = multiprocessing.Process(
+            target=process_task,
+            args=(i, dsm.memory, dsm.lock)
+        )
+
+        processes.append(p)
+        p.start()
+
+    # Wait for all processes to finish
+    for p in processes:
+        p.join()
+
+    print("\nFinal DSM Contents:")
+    print(dict(dsm.memory))
+
+    # Shut down the Manager
+    manager.shutdown()
+
+Terminal: python dsm_practical.py
+Practical 6: Cassandra consistency levels using a three-node Apache Cassandra cluster running in Docker 
+
+Keep Docker Desktop open 
+Step 1: 
+Cmd:  mkdir C:\Users\mendo\Dscc_practs\prac_06
+cd C:\Users\mendo\Dscc_practs\prac_06
+code .
+
+Step 2 — In the VS Code terminal, select PowerShell and run: 
+python -m venv .myvenv
+.myvenv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install cassandra-driver
+pip install pyasyncore
+
+Step 3:  Create docker-compose.yml 
+services:
+  cassandra1:
+    image: cassandra:4.1
+    container_name: cassandra1
+    hostname: cassandra1
+    ports:
+      - "9042:9042"
+    environment:
+      - CASSANDRA_CLUSTER_NAME=DSCCCluster
+      - CASSANDRA_DC=DC1
+      - CASSANDRA_RACK=RAC1
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - MAX_HEAP_SIZE=512M
+      - HEAP_NEWSIZE=100M
+    networks:
+      - cassandra-net
+
+  cassandra2:
+    image: cassandra:4.1
+    container_name: cassandra2
+    hostname: cassandra2
+    environment:
+      - CASSANDRA_CLUSTER_NAME=DSCCCluster
+      - CASSANDRA_SEEDS=cassandra1
+      - CASSANDRA_DC=DC1
+      - CASSANDRA_RACK=RAC1
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - MAX_HEAP_SIZE=512M
+      - HEAP_NEWSIZE=100M
+    depends_on:
+      - cassandra1
+    networks:
+      - cassandra-net
+
+  cassandra3:
+    image: cassandra:4.1
+    container_name: cassandra3
+    hostname: cassandra3
+    environment:
+      - CASSANDRA_CLUSTER_NAME=DSCCCluster
+      - CASSANDRA_SEEDS=cassandra1
+      - CASSANDRA_DC=DC1
+      - CASSANDRA_RACK=RAC1
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - MAX_HEAP_SIZE=512M
+      - HEAP_NEWSIZE=100M
+    depends_on:
+      - cassandra1
+    networks:
+      - cassandra-net
+
+networks:
+  cassandra-net:
+    driver: bridge
+
+Step 4 — Open a second PowerShell window (or a new VS Code terminal). Navigate to the practical folder: 
+
+cd C:\Users\mendo\Dscc_practs\prac_06
+Start the cluster: 
+docker compose up -d
+docker ps
+docker logs cassandra1
+docker exec -it cassandra1 cqlsh
+exit;
+docker exec -it cassandra1 nodetool status
+docker exec -it cassandra2 nodetool status
+docker exec -it cassandra3 nodetool status
+
+Create schema.cql 
+CREATE KEYSPACE IF NOT EXISTS consistency_demo
+WITH replication = {
+  'class': 'NetworkTopologyStrategy',
+  'DC1': 3
+};
+
+USE consistency_demo;
+
+CREATE TABLE IF NOT EXISTS kv_store (
+    key     text PRIMARY KEY,
+    value   text,
+    version int
+);
+
+CREATE TABLE IF NOT EXISTS causal_store (
+    key     text PRIMARY KEY,
+    value   text,
+    version int
+);
+
+CREATE TABLE IF NOT EXISTS sequential_store (
+    id      text PRIMARY KEY,
+    value   int
+);
+
+Terminal: 
+docker cp schema.cql cassandra1:/schema.cql
+docker cp schema.cql cassandra2:/schema.cql
+docker cp schema.cql cassandra3:/schema.cql
+docker exec -it cassandra1 cqlsh -f /schema.cql
+docker exec -it cassandra2 cqlsh -f /schema.cql
+docker exec -it cassandra3 cqlsh -f /schema.cql
+
+Create consistency_demo.py 
+from cassandra.cluster import Cluster
+from cassandra import ConsistencyLevel
+import time
+
+
+# =========================================================
+# CONNECT TO CASSANDRA
+# =========================================================
+
+print("=" * 75)
+print("CONNECTING TO APACHE CASSANDRA")
+print("=" * 75)
+
+cluster = Cluster(["127.0.0.1"])
+session = cluster.connect("consistency_demo")
+
+print("Connected to Cassandra successfully.\n")
+
+
+# =========================================================
+# HELPER FUNCTION
+# =========================================================
+
+def read_value(table, key, consistency):
+    """
+    Read a key using the specified Cassandra consistency level.
+    """
+
+    query = f"""
+        SELECT key, value, version
+        FROM {table}
+        WHERE key = ?
+    """
+
+    statement = session.prepare(query)
+    statement.consistency_level = consistency
+
+    row = session.execute(statement, [key]).one()
+
+    if row:
+        return row.key, row.value, row.version
+
+    return None
+
+
+# =========================================================
+# 1. EVENTUAL CONSISTENCY
+# =========================================================
+
+def demonstrate_eventual_consistency():
+
+    print("\n")
+    print("=" * 75)
+    print("1. EVENTUAL CONSISTENCY")
+    print("=" * 75)
+
+    key = "eventual_key"
+
+    # -----------------------------------------------------
+    # WRITE USING ONE
+    # -----------------------------------------------------
+
+    insert = session.prepare("""
+        INSERT INTO kv_store(key, value, version)
+        VALUES (?, ?, ?)
+    """)
+
+    insert.consistency_level = ConsistencyLevel.ONE
+
+    session.execute(
+        insert,
+        [key, "Version-1", 1]
+    )
+
+    print("\nWRITE OPERATION")
+    print("-" * 75)
+    print("Value              : Version-1")
+    print("Write Consistency  : ONE")
+    print("Required replicas  : At least ONE replica must acknowledge")
+    
+    # -----------------------------------------------------
+    # READ USING ONE
+    # -----------------------------------------------------
+
+    result = read_value(
+        "kv_store",
+        key,
+        ConsistencyLevel.ONE
+    )
+
+    print("\nIMMEDIATE READ")
+    print("-" * 75)
+    print("Read Consistency   : ONE")
+    print("Result             :", result)
+
+    print("""
+Explanation:
+At consistency level ONE, Cassandra requires only one
+replica to respond successfully.
+
+The write may not have reached every replica at the
+same time. Cassandra's replication and repair mechanisms
+eventually bring replicas into agreement.
+
+Therefore, this demonstrates the configuration that
+allows eventual consistency.
+
+Note:
+A stale read is not guaranteed to occur in this simple
+single-node/local demonstration.
+""")
+
+    # -----------------------------------------------------
+    # LATER READ USING QUORUM
+    # -----------------------------------------------------
+
+    time.sleep(2)
+
+    result = read_value(
+        "kv_store",
+        key,
+        ConsistencyLevel.QUORUM
+    )
+
+    print("LATER QUORUM READ")
+    print("-" * 75)
+    print("Read Consistency   : QUORUM")
+    print("Result             :", result)
+
+    print("""
+Conclusion:
+The value is expected to converge to the latest value
+as replicas become synchronized.
+
+EVENTUAL CONSISTENCY DEMONSTRATED
+""")
+
+
+# =========================================================
+# 2. STRONG / LINEARIZABLE CONSISTENCY
+# =========================================================
+
+def demonstrate_strong_consistency():
+
+    print("\n")
+    print("=" * 75)
+    print("2. STRONG / LINEARIZABLE CONSISTENCY")
+    print("=" * 75)
+
+    key = "strong_key"
+
+    # -----------------------------------------------------
+    # INITIAL VALUE
+    # -----------------------------------------------------
+
+    insert = session.prepare("""
+        INSERT INTO kv_store(key, value, version)
+        VALUES (?, ?, ?)
+    """)
+
+    insert.consistency_level = ConsistencyLevel.QUORUM
+
+    session.execute(
+        insert,
+        [key, "Initial", 1]
+    )
+
+    print("\nINITIAL WRITE")
+    print("-" * 75)
+    print("Value              : Initial")
+    print("Version            : 1")
+    print("Write Consistency  : QUORUM")
+
+    # -----------------------------------------------------
+    # LIGHTWEIGHT TRANSACTION
+    # -----------------------------------------------------
+
+    lwt_query = """
+        UPDATE kv_store
+        SET value = ?, version = ?
+        WHERE key = ?
+        IF version = ?
+    """
+
+    lwt = session.prepare(lwt_query)
+
+    # SERIAL is the consistency level used for the
+    # Paxos phase of the Lightweight Transaction.
+    lwt.serial_consistency_level = ConsistencyLevel.SERIAL
+
+    result = session.execute(
+        lwt,
+        ["Strong-Version", 2, key, 1]
+    ).one()
+
+    print("\nLIGHTWEIGHT TRANSACTION")
+    print("-" * 75)
+    print("Condition          : version = 1")
+    print("New value          : Strong-Version")
+    print("New version        : 2")
+    print("Serial consistency : SERIAL")
+    print("LWT Result         :", result)
+
+    # -----------------------------------------------------
+    # READ USING QUORUM
+    # -----------------------------------------------------
+
+    result = read_value(
+        "kv_store",
+        key,
+        ConsistencyLevel.QUORUM
+    )
+
+    print("\nQUORUM READ")
+    print("-" * 75)
+    print("Result             :", result)
+
+    print("""
+Explanation:
+Cassandra Lightweight Transactions (LWT) use Paxos to
+coordinate conditional updates.
+
+The update is performed only if the condition:
+
+    version = 1
+
+is true.
+
+Once another transaction changes the version to 2,
+another transaction using IF version = 1 will fail.
+
+This provides linearizable behavior for the
+conditional operation.
+
+STRONG / LINEARIZABLE CONSISTENCY DEMONSTRATED
+""")
+
+
+# =========================================================
+# 3. CAUSAL CONSISTENCY
+# =========================================================
+
+def demonstrate_causal_consistency():
+
+    print("\n")
+    print("=" * 75)
+    print("3. CAUSAL CONSISTENCY")
+    print("=" * 75)
+
+    key1 = "message"
+    key2 = "reply"
+
+    # -----------------------------------------------------
+    # PREPARE INSERT
+    # -----------------------------------------------------
+
+    insert = session.prepare("""
+        INSERT INTO causal_store(key, value, version)
+        VALUES (?, ?, ?)
+    """)
+
+    insert.consistency_level = ConsistencyLevel.QUORUM
+
+    # -----------------------------------------------------
+    # OPERATION A
+    # -----------------------------------------------------
+
+    session.execute(
+        insert,
+        [key1, "Message created", 1]
+    )
+
+    print("\nOPERATION A")
+    print("-" * 75)
+    print("Message created")
+    print("Version          : 1")
+    print("Consistency      : QUORUM")
+    print("Status           : COMPLETED")
+
+    # -----------------------------------------------------
+    # OPERATION B
+    # -----------------------------------------------------
+    # B starts only AFTER A has completed.
+
+    session.execute(
+        insert,
+        [key2, "Reply to message", 2]
+    )
+
+    print("\nOPERATION B")
+    print("-" * 75)
+    print("Reply to message")
+    print("Version          : 2")
+    print("Consistency      : QUORUM")
+    print("Status           : COMPLETED")
+
+    print("""
+CAUSAL RELATIONSHIP
+
+    Operation A
+        |
+        | A completes first
+        v
+    Operation B
+
+Because Operation B is executed only after Operation A
+has completed, the application explicitly preserves
+the causal dependency:
+
+    A -> B
+""")
+
+    # -----------------------------------------------------
+    # READ BOTH OPERATIONS
+    # -----------------------------------------------------
+
+    a = read_value(
+        "causal_store",
+        key1,
+        ConsistencyLevel.QUORUM
+    )
+
+    b = read_value(
+        "causal_store",
+        key2,
+        ConsistencyLevel.QUORUM
+    )
+
+    print("READ RESULTS")
+    print("-" * 75)
+    print("READ A:", a)
+    print("READ B:", b)
+
+    # -----------------------------------------------------
+    # CHECK CAUSAL ORDER
+    # -----------------------------------------------------
+
+    if a and b and a[2] < b[2]:
+
+        print("\nCausal order preserved:")
+        print("A (version 1) -> B (version 2)")
+
+    else:
+
+        print("\nCausal order NOT preserved")
+
+    print("""
+Important:
+Cassandra does not have a single consistency level named
+'CAUSAL'.
+
+This experiment demonstrates causal ordering at the
+APPLICATION level. The application ensures that B is
+performed only after A completes.
+
+CAUSAL CONSISTENCY / CAUSAL ORDERING DEMONSTRATED
+""")
+
+
+# =========================================================
+# 4. SEQUENTIAL CONSISTENCY
+# =========================================================
+
+def demonstrate_sequential_consistency():
+
+    print("\n")
+    print("=" * 70)
+    print("4. SEQUENTIAL CONSISTENCY")
+    print("=" * 70)
+
+    key = 'counter'
+
+    # -----------------------------------------------------
+    # STEP 1: RESET COUNTER
+    # -----------------------------------------------------
+
+    reset_query = """
+        INSERT INTO sequential_store(id, value)
+        VALUES (?, ?)
+    """
+
+    reset_statement = session.prepare(reset_query)
+    reset_statement.consistency_level = ConsistencyLevel.QUORUM
+
+    session.execute(
+        reset_statement,
+        [key, 0]
+    )
+
+    print("\nInitial value:")
+    print("Counter = 0")
+
+    # -----------------------------------------------------
+    # VERIFY INITIAL VALUE
+    # -----------------------------------------------------
+
+    read_query = """
+        SELECT id, value
+        FROM sequential_store
+        WHERE id = ?
+    """
+
+    read_statement = session.prepare(read_query)
+    read_statement.consistency_level = ConsistencyLevel.QUORUM
+
+    row = session.execute(
+        read_statement,
+        [key]
+    ).one()
+
+    print("Verified value =", row.value)
+
+    # -----------------------------------------------------
+    # OPERATION 1
+    # -----------------------------------------------------
+
+    operation1_query = """
+        UPDATE sequential_store
+        SET value = 1
+        WHERE id = ?
+        IF value = 0
+    """
+
+    operation1 = session.prepare(operation1_query)
+
+    operation1.consistency_level = ConsistencyLevel.QUORUM
+    operation1.serial_consistency_level = ConsistencyLevel.SERIAL
+
+    result1 = session.execute(
+        operation1,
+        [key]
+    ).one()
+
+    print("\nOperation 1:")
+    print("0 -> 1")
+    print("Condition: Current value must be 0")
+    print("Result:", result1)
+
+    # -----------------------------------------------------
+    # VERIFY OPERATION 1
+    # -----------------------------------------------------
+
+    row = session.execute(
+        read_statement,
+        [key]
+    ).one()
+
+    print("Value after Operation 1 =", row.value)
+
+    # -----------------------------------------------------
+    # OPERATION 2
+    # -----------------------------------------------------
+
+    operation2_query = """
+        UPDATE sequential_store
+        SET value = 2
+        WHERE id = ?
+        IF value = 1
+    """
+
+    operation2 = session.prepare(operation2_query)
+
+    operation2.consistency_level = ConsistencyLevel.QUORUM
+    operation2.serial_consistency_level = ConsistencyLevel.SERIAL
+
+    result2 = session.execute(
+        operation2,
+        [key]
+    ).one()
+
+    print("\nOperation 2:")
+    print("1 -> 2")
+    print("Condition: Current value must be 1")
+    print("Result:", result2)
+
+    # -----------------------------------------------------
+    # FINAL VALUE
+    # -----------------------------------------------------
+
+    row = session.execute(
+        read_statement,
+        [key]
+    ).one()
+
+    print("\nFinal value:")
+    print("Counter =", row.value)
+
+    # -----------------------------------------------------
+    # EXPLANATION
+    # -----------------------------------------------------
+
+    print("""
+------------------------------------------------------------
+SEQUENTIAL CONSISTENCY EXPLANATION
+------------------------------------------------------------
+
+Initial value:
+    0
+
+Operation 1:
+    0 -> 1
+
+Operation 2:
+    1 -> 2
+
+Therefore:
+
+    0 -> 1 -> 2
+
+Operation 2 expects the current value to be 1.
+Therefore, Operation 2 can succeed only after
+Operation 1 has successfully changed the value
+from 0 to 1.
+
+The operations are therefore performed in a
+clear sequential order.
+
+Final value = 2
+
+SEQUENTIAL CONSISTENCY DEMONSTRATED
+------------------------------------------------------------
+""")
+
+
+# =========================================================
+# MAIN PROGRAM
+# =========================================================
+
+if __name__ == "__main__":
+
+    try:
+
+        demonstrate_eventual_consistency()
+
+        demonstrate_strong_consistency()
+
+        demonstrate_causal_consistency()
+
+        demonstrate_sequential_consistency()
+
+    finally:
+
+        cluster.shutdown()
+
+        print("\n")
+        print("=" * 75)
+        print("CASSANDRA CONNECTION CLOSED")
+        print("=" * 75)
+Terminal: python consistency_demo.py 
+
+Practical 7: Load Balancer using Round Robin and Least Connection. 
+
+Code: 
+# ============================================================
+# LOAD BALANCER USING ROUND ROBIN AND LEAST CONNECTION
+# ============================================================
+
+
+# ------------------------------------------------------------
+# SERVER CLASS
+# ------------------------------------------------------------
+
+class Server:
+
+    def __init__(self, server_id):
+        self.server_id = server_id
+        self.connections = 0
+        self.total_requests = 0
+
+    def handle_request(self, request_id):
+
+        self.connections += 1
+        self.total_requests += 1
+
+        print(
+            f"Request {request_id} assigned to "
+            f"Server {self.server_id}"
+        )
+
+    def release_connection(self):
+
+        if self.connections > 0:
+            self.connections -= 1
+
+
+# ------------------------------------------------------------
+# ROUND ROBIN LOAD BALANCER
+# ------------------------------------------------------------
+
+class RoundRobinLoadBalancer:
+
+    def __init__(self, servers):
+
+        self.servers = servers
+        self.current_index = 0
+
+    def get_server(self):
+
+        server = self.servers[self.current_index]
+
+        self.current_index = (
+            self.current_index + 1
+        ) % len(self.servers)
+
+        return server
+
+
+# ------------------------------------------------------------
+# LEAST CONNECTION LOAD BALANCER
+# ------------------------------------------------------------
+
+class LeastConnectionLoadBalancer:
+
+    def __init__(self, servers):
+
+        self.servers = servers
+
+    def get_server(self):
+
+        return min(
+            self.servers,
+            key=lambda server: server.connections
+        )
+
+
+# ------------------------------------------------------------
+# CREATE SERVERS
+# ------------------------------------------------------------
+
+def create_servers(number_of_servers):
+
+    return [
+        Server(i + 1)
+        for i in range(number_of_servers)
+    ]
+
+
+# ============================================================
+# ROUND ROBIN SIMULATION
+# ============================================================
+
+def simulate_round_robin(
+    number_of_servers,
+    number_of_requests
+):
+
+    servers = create_servers(number_of_servers)
+
+    load_balancer = RoundRobinLoadBalancer(servers)
+
+    print("\n")
+    print("=" * 60)
+    print("ROUND ROBIN LOAD BALANCER")
+    print("=" * 60)
+
+    for request_id in range(
+        1,
+        number_of_requests + 1
+    ):
+
+        server = load_balancer.get_server()
+
+        server.handle_request(request_id)
+
+    print("\n" + "-" * 60)
+    print("FINAL RESULT")
+    print("-" * 60)
+
+    for server in servers:
+
+        print(
+            f"Server {server.server_id}: "
+            f"{server.total_requests} requests handled"
+        )
+
+
+# ============================================================
+# LEAST CONNECTION SIMULATION
+# ============================================================
+
+def simulate_least_connection(
+    number_of_servers,
+    number_of_requests
+):
+
+    servers = create_servers(number_of_servers)
+
+    load_balancer = LeastConnectionLoadBalancer(servers)
+
+    print("\n")
+    print("=" * 60)
+    print("LEAST CONNECTION LOAD BALANCER")
+    print("=" * 60)
+
+    for request_id in range(
+        1,
+        number_of_requests + 1
+    ):
+
+        # Select server with minimum connections
+        server = load_balancer.get_server()
+
+        # Assign request
+        server.handle_request(request_id)
+
+        # Display current connections
+        print(
+            "Current Connections:",
+            [
+                server.connections
+                for server in servers
+            ]
+        )
+
+        # Simulate completion after every 2 requests
+        if request_id % 2 == 0:
+
+            busy_servers = [
+                server
+                for server in servers
+                if server.connections > 0
+            ]
+
+            if busy_servers:
+
+                # Release connection from the
+                # first busy server
+                completed_server = busy_servers[0]
+
+                completed_server.release_connection()
+
+                print(
+                    f"Request completed on "
+                    f"Server {completed_server.server_id}"
+                )
+
+    print("\n" + "-" * 60)
+    print("FINAL RESULT")
+    print("-" * 60)
+
+    for server in servers:
+
+        print(
+            f"Server {server.server_id}: "
+            f"{server.total_requests} requests handled, "
+            f"{server.connections} active connections"
+        )
+
+
+# ============================================================
+# MAIN PROGRAM
+# ============================================================
+
+number_of_servers = 3
+number_of_requests = 10
+
+
+# Run Round Robin
+simulate_round_robin(
+    number_of_servers,
+    number_of_requests
+)
+
+
+# Run Least Connection
+simulate_least_connection(
+    number_of_servers,
+    number_of_requests
+)
+Terminal: python load_balancer.py
+
+Practical 8: running a small Python Flask application inside a Docker container. 
+
+Open the terminal: Terminal → New Terminal. 
+docker --version
+docker ps
+cd C:\Users\mendo\Dscc_practs
+mkdir prac_08
+cd prac_08
+
+Create app.py 
+from flask import Flask
+
+app = Flask(__name__)
+
+
+@app.route("/")
+def home():
+    return "Hello! Python application is running inside a Docker container."
+
+
+@app.route("/info")
+def info():
+    return {
+        "application": "Docker Hands-On",
+        "message": "Container is running successfully",
+        "technology": "Python Flask"
+    }
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
+
+Create requirements.txt 
+
+Flask
+
+Create the Dockerfile 
+
+# Use Python base image
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements file
+COPY requirements.txt .
+
+# Install required packages
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy Python application
+COPY app.py .
+
+# Expose application port
+EXPOSE 5000
+
+# Run the Python application
+CMD ["python", "app.py"]
+
+Terminal: 
+docker build -t python-docker-app .
+docker images
+docker run -d --name python-container -p 5000:5000 python-docker-app
+Home page: http://localhost:5000
+Info page: http://localhost:5000/info
+
+Practical 9: Kubernetes Load Balancing Using Flask 
+
+Terminal: 
+docker --version
+kubectl version --client
+kubectl config get-contexts
+kubectl config current-context
+kubectl cluster-info
+kubectl get nodes
+
+pract09
+│
+├── app.py
+├── client.py
+├── requirements.txt
+├── Dockerfile
+└── deployment.yaml
+
+app.py
+from flask import Flask
+import socket
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return f"Hello from pod: {socket.gethostname()}"
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
+
+client.py
+import requests
+
+URL = "http://localhost:30007"
+
+for i in range(10):
+    response = requests.get(URL)
+    print(f"Request {i + 1}: {response.text}")
+
+deployment.yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-multi
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: hello-multi
+  template:
+    metadata:
+      labels:
+        app: hello-multi
+    spec:
+      containers:
+        - name: hello-python
+          image: hello-python-multi:2.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-multi-service
+spec:
+  type: NodePort
+  selector:
+    app: hello-multi
+  ports:
+    - port: 80
+      targetPort: 5000
+      nodePort: 30007
+
+Dockerfile:
+
+FROM python:3.10-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app.py .
+
+EXPOSE 5000
+
+CMD ["python", "app.py"]
+
+requirements.txt
+
+flask
+
+Cmd:
+docker build -t hello-python-multi:2.0 .
+docker images hello-python-multi
+kubectl config current-context
+kubectl apply -f deployment.yaml
+kubectl get deployments
+kubectl get pods
+kubectl get pods -w
+kubectl get deployments
+
+New vscode terminal:
+curl.exe http://localhost:30007
+python client.py
+
+Practical 11: AWS Lambda Function
+Aim
+To create and test an AWS Lambda function that accepts a POST request, reads a name from the JSON request body, and returns a greeting. The function rejects GET requests.
+Software / Platform Required
+AWS Academy Learner Lab
+AWS Lambda
+Python
+Web browser
+Step 1: Open AWS Academy Learner Lab
+Log in to your AWS Academy account.
+Open AWS Academy Learner Lab.
+Click Start Lab.
+Wait until the AWS status indicator becomes green.
+Click AWS Details.
+Find AWS SSO and click Download URL.
+Open the AWS Console link.
+Select the region US East (N. Virginia) — us-east-1.
+Step 2: Open AWS Lambda
+In the AWS Console search bar, type Lambda.
+Click Lambda.
+Open the Lambda dashboard.
+Step 3: Create a Lambda Function
+Click Create function.
+Select Author from scratch.
+Enter the following details:
+Setting
+Value
+Function name
+HelloWorldFunction
+Runtime
+Python 3.14
+Architecture
+Default
+Permissions
+Default execution role, or existing LabRole if required
+
+
+Leave other settings at their defaults.
+Click Create function.
+If the lab does not permit creating an IAM role, choose Use an existing role under Additional settings and select LabRole, if available.
+Step 4: Enter the Python Code
+Open the newly created HelloWorldFunction.
+Under Code source, open lambda_function.py.
+Select all existing code and replace it with the following:
+import json
+
+print('Loading function')
+
+
+def lambda_handler(event, context):
+
+    # Get the HTTP request method
+    method = event.get("requestContext", {}).get("http", {}).get("method", "")
+
+    # Reject GET requests
+    if method == "GET":
+        return {
+            "statusCode": 405,
+            "body": json.dumps({
+                "message": "GET method not allowed. Please use POST."
+            })
+        }
+
+    # Read the POST request body
+    body = event.get("body")
+
+    if isinstance(body, str):
+        body = json.loads(body)
+    elif body is None:
+        body = {}
+
+    # Get the name from the JSON body
+    name = body.get("name", "World")
+
+    # Return the response
+    return {
+        "statusCode": 200,
+        "headers": {
+            "Content-Type": "application/json"
+        },
+        "body": json.dumps({
+            "message": f"Hello, {name}!"
+        })
+    }
+Click Deploy.
+Wait for the deployment confirmation.
+Step 5: Test the POST Request
+Click the Test tab.
+Select Create new event.
+Enter the event name: POSTTest
+{
+  "requestContext": {
+    "http": {
+      "method": "POST"
+    }
+  },
+  "body": "{\"name\":\"Maanya\"}"
+}
+
+Click Save.
+Click Test.
+
+Test the GET Request
+Create another test event.
+Enter the event name: GETTest
+
+{
+  "requestContext": {
+    "http": {
+      "method": "GET"
+    }
+  },
+  "body": "{\"name\":\"Maanya\"}"
+}
+
+Practical 12: AWS Lambda Function to Upload a File to Amazon S3
+Aim
+To create an AWS Lambda function that accepts a file through a POST request and uploads the file to an Amazon S3 bucket.
+Software / Services Required
+AWS Academy Learner Lab
+Amazon S3
+AWS Lambda
+Python 3.14
+AWS Management Console
+Procedure
+Step 1: Start AWS Academy Learner Lab
+Open AWS Academy Learner Lab.
+Start the lab and wait until the AWS session becomes active.
+Open the AWS Management Console using the AWS SSO link.
+Step 2: Create an S3 Bucket
+Open the Amazon S3 service.
+Click Create bucket.
+Select the AWS Region: Asia Pacific (Sydney) — ap-southeast-2.
+Select General purpose as the bucket type.
+Select Global namespace.
+Enter the bucket name:
+my-lambda-file-storage-2026-2-387421310630
+Under Object Ownership, select ACLs disabled — Bucket owner enforced.
+Keep Block all public access enabled.
+Set Bucket Versioning to Disable.
+Leave Tags empty.
+Select Server-side encryption with Amazon S3 managed keys (SSE-S3).
+Keep Bucket Key disabled.
+Click Create bucket.
+The bucket was created successfully.
+Step 3: Create an AWS Lambda Function
+Open the AWS Console search bar.
+Search for Lambda and open the service.
+Ensure the region is the same as the S3 bucket: Asia Pacific (Sydney) — ap-southeast-2.
+Click Create function.
+Select Author from scratch.
+Enter the function name:
+my-lambda-file-storage-2026-2
+Select Python 3.14 as the runtime.
+Under Permissions, select Use an existing role.
+Choose the Learner Lab execution role provided in the lab.
+Click Create function.
+Step 4: Configure the Environment Variable
+Open the created Lambda function.
+Go to Configuration.
+Select Environment variables.
+Click Edit and then Add environment variable.
+Enter the following:
+Key
+Value
+BUCKET_NAME
+my-lambda-file-storage-2026-2-387421310630
+
+6. Click Save.
+Step 5: Add the Lambda Code
+Open the Code tab.
+Open the file lambda_function.py.
+Replace the existing code with the following code.
+Click Deploy.
+Python Code
+import json
+import os
+import base64
+import boto3
+from urllib.parse import unquote
+
+print("Loading function")
+
+s3 = boto3.client("s3")
+BUCKET_NAME = os.environ["BUCKET_NAME"]
+
+def lambda_handler(event, context):
+    method = event.get("requestContext", {}).get(
+        "http", {}
+    ).get("method", "")
+
+    if method != "POST":
+        return {
+            "statusCode": 405,
+            "body": json.dumps({
+                "message": "Method not allowed. Use POST."
+            })
+        }
+
+    try:
+        filename = unquote(
+            (event.get("queryStringParameters") or {}).get(
+                "filename", "upload.bin"
+            )
+        )
+
+        body = event.get("body") or ""
+
+        if event.get("isBase64Encoded"):
+            file_data = base64.b64decode(body)
+        else:
+            file_data = body.encode("utf-8")
+
+        s3.put_object(
+            Bucket=BUCKET_NAME,
+            Key=filename,
+            Body=file_data
+        )
+
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({
+                "message": "File uploaded successfully!",
+                "bucket": BUCKET_NAME,
+                "filename": filename
+            })
+        }
+
+    except Exception as e:
+        print("Upload failed:", str(e))
+        return {
+            "statusCode": 500,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({
+                "message": "File upload failed."
+            })
+        }
+Step 6: Create a Test Event
+Click Test in the Lambda function.
+Select Create new event.
+Enter the event name:
+S3UploadTest
+Replace the test event JSON with:
+{
+  "requestContext": {
+    "http": {
+      "method": "POST"
+    }
+  },
+  "queryStringParameters": {
+    "filename": "sample.txt"
+  },
+  "body": "Hello from AWS Lambda!",
+  "isBase64Encoded": false
+}
+Click Save.
+Click Test to execute the function.
+Step 7: Verify the Uploaded File
+Open the Amazon S3 service.
+Open the bucket:
+my-lambda-file-storage-2026-2-387421310630
+Select the Objects tab.
+Refresh the page.
+Verify that the file sample.txt is present in the bucket.
+Practical 13 — Host a Website on AWS S3 
+Create a folder named: Elegance-Website
+index.html
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elegance | Online Store</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Navigation Bar -->
+    <header>
+        <nav class="navbar">
+            <a href="#" class="logo">Elegance<span>.</span></a>
+
+            <ul class="nav-links">
+                <li><a href="#home">Home</a></li>
+                <li><a href="#products">Products</a></li>
+                <li><a href="#about">About</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+
+            <button class="cart-button" onclick="viewCart()">
+                🛒 Cart (<span id="cart-count">0</span>)
+            </button>
+        </nav>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero" id="home">
+        <div class="hero-content">
+            <p class="eyebrow">THE NEW COLLECTION</p>
+            <h1>Style that speaks<br>for itself.</h1>
+            <p>Discover thoughtfully selected products
+               designed for your everyday lifestyle.</p>
+            <a href="#products" class="shop-button">Shop Now</a>
+        </div>
+    </section>
+
+    <!-- Products Section -->
+    <section class="products-section" id="products">
+        <div class="section-heading">
+            <p class="eyebrow">OUR COLLECTION</p>
+            <h2>Featured Products</h2>
+            <p>Find something you'll love.</p>
+        </div>
+
+        <div class="product-grid">
+
+            <!-- Product 1 -->
+            <article class="product-card">
+                <img src="images/product1.jpg"
+                     alt="Classic product one"
+                     class="product-image">
+
+                <div class="product-info">
+                    <p class="category">ESSENTIALS</p>
+                    <h3>Classic Everyday</h3>
+                    <p class="price">₹1,499</p>
+                    <button class="add-button"
+                            onclick="addToCart(1)">
+                        Add to Cart
+                    </button>
+                </div>
+            </article>
+
+            <!-- Product 2 -->
+            <article class="product-card">
+                <img src="images/product2.jpg"
+                     alt="Premium product two"
+                     class="product-image">
+
+                <div class="product-info">
+                    <p class="category">PREMIUM</p>
+                    <h3>Modern Signature</h3>
+                    <p class="price">₹2,499</p>
+                    <button class="add-button"
+                            onclick="addToCart(2)">
+                        Add to Cart
+                    </button>
+                </div>
+            </article>
+
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section class="about-section" id="about">
+        <p class="eyebrow">OUR PHILOSOPHY</p>
+        <h2>Less, but better.</h2>
+        <p>
+            We believe great products combine quality,
+            thoughtful design, and everyday functionality.
+            Explore our collection and find your favourites.
+        </p>
+    </section>
+
+    <!-- Contact Section -->
+    <footer id="contact">
+        <h2>Elegance<span>.</span></h2>
+        <p>Questions? Contact us at hello@example.com</p>
+        <p class="copyright">
+            © 2026 Elegance. All rights reserved.
+        </p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
+
+script.js
+
+/* Product Information */
+const products = [
+    {
+        id: 1,
+        name: "Classic Everyday",
+        price: 1499
+    },
+    {
+        id: 2,
+        name: "Modern Signature",
+        price: 2499
+    }
+];
+
+/* Shopping Cart */
+let cart = [];
+
+/* Add Product to Cart */
+function addToCart(productId) {
+    const product = products.find(
+        item => item.id === productId
+    );
+
+    if (!product) {
+        alert("Product not found.");
+        return;
+    }
+
+    const cartItem = cart.find(
+        item => item.id === productId
+    );
+
+    if (cartItem) {
+        cartItem.quantity++;
+    } else {
+        cart.push({
+            ...product,
+            quantity: 1
+        });
+    }
+
+    updateCartCount();
+
+    alert(product.name + " added to your cart!");
+}
+
+/* Update Cart Count */
+function updateCartCount() {
+    const count = cart.reduce(
+        (total, item) => total + item.quantity,
+        0
+    );
+
+    document.getElementById("cart-count").textContent = count;
+}
+
+/* View Cart */
+function viewCart() {
+    if (cart.length === 0) {
+        alert("Your shopping cart is empty.");
+        return;
+    }
+
+    let message = "YOUR SHOPPING CART\n\n";
+    let total = 0;
+
+    cart.forEach(item => {
+        const subtotal = item.price * item.quantity;
+        total += subtotal;
+
+        message += item.name +
+            "\nPrice: ₹" + item.price +
+            "\nQuantity: " + item.quantity +
+            "\nSubtotal: ₹" + subtotal +
+            "\n\n";
+    });
+
+    message += "TOTAL: ₹" + total;
+
+    const removeItem = confirm(
+        message +
+        "\n\nClick OK to clear the cart, or Cancel to keep shopping."
+    );
+
+    if (removeItem) {
+        cart = [];
+        updateCartCount();
+        alert("Your cart has been cleared.");
+    }
+}
+
+style.css
+
+/* General Reset */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    color: #242424;
+    background: #ffffff;
+    line-height: 1.6;
+}
+
+/* Navigation */
+.navbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 8%;
+    background: #ffffff;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.logo,
+footer h2 {
+    font-size: 28px;
+    font-weight: bold;
+    color: #222222;
+    text-decoration: none;
+}
+
+.logo span,
+footer span {
+    color: #bd8b5c;
+}
+
+.nav-links {
+    display: flex;
+    list-style: none;
+    gap: 30px;
+}
+
+.nav-links a {
+    text-decoration: none;
+    color: #444444;
+    font-size: 14px;
+    transition: color 0.3s;
+}
+
+.nav-links a:hover {
+    color: #bd8b5c;
+}
+
+.cart-button {
+    padding: 10px 16px;
+    background: #222222;
+    color: white;
+    border: none;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+/* Hero */
+.hero {
+    min-height: 470px;
+    display: flex;
+    align-items: center;
+    padding: 70px 10%;
+    background: linear-gradient(120deg, #f4eee7, #e7d8c8);
+}
+
+.hero-content {
+    max-width: 550px;
+}
+
+.eyebrow {
+    color: #a4774e;
+    font-size: 12px;
+    letter-spacing: 3px;
+    font-weight: bold;
+    margin-bottom: 15px;
+}
+
+.hero h1 {
+    font-size: clamp(38px, 6vw, 64px);
+    line-height: 1.1;
+    margin-bottom: 20px;
+}
+
+.hero-content > p:not(.eyebrow) {
+    color: #666666;
+    margin-bottom: 30px;
+}
+
+.shop-button {
+    display: inline-block;
+    background: #222222;
+    color: white;
+    text-decoration: none;
+    padding: 13px 30px;
+    border-radius: 4px;
+    transition: background 0.3s;
+}
+
+.shop-button:hover {
+    background: #a4774e;
+}
+
+/* Products */
+.products-section {
+    padding: 75px 8%;
+}
+
+.section-heading {
+    text-align: center;
+    margin-bottom: 40px;
+}
+
+.section-heading h2,
+.about-section h2 {
+    font-size: 34px;
+    margin-bottom: 10px;
+}
+
+.section-heading > p:last-child {
+    color: #777777;
+}
+
+.product-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 30px;
+    max-width: 900px;
+    margin: auto;
+}
+
+.product-card {
+    border: 1px solid #eeeeee;
+    border-radius: 8px;
+    overflow: hidden;
+    background: white;
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.product-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+}
+
+.product-image {
+    width: 100%;
+    height: 300px;
+    object-fit: cover;
+    display: block;
+    background: #f5f5f5;
+}
+
+.product-info {
+    padding: 22px;
+}
+
+.category {
+    color: #a4774e;
+    font-size: 11px;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+}
+
+.product-info h3 {
+    font-size: 20px;
+    margin-bottom: 8px;
+}
+
+.price {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 18px;
+}
+
+.add-button {
+    width: 100%;
+    padding: 12px;
+    background: #222222;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.add-button:hover {
+    background: #a4774e;
+}
+
+/* About */
+.about-section {
+    text-align: center;
+    background: #f8f5f1;
+    padding: 70px 10%;
+}
+
+.about-section > p:last-child {
+    max-width: 650px;
+    margin: 15px auto 0;
+    color: #666666;
+}
+
+/* Footer */
+footer {
+    text-align: center;
+    padding: 40px 20px;
+    background: #222222;
+    color: #dddddd;
+}
+
+footer h2 {
+    color: white;
+    margin-bottom: 10px;
+}
+
+footer p {
+    font-size: 14px;
+}
+
+.copyright {
+    margin-top: 20px;
+    color: #999999;
+}
+
+/* Mobile Responsive Layout */
+@media (max-width: 700px) {
+    .navbar {
+        flex-wrap: wrap;
+        gap: 15px;
+        padding: 18px 5%;
+    }
+
+    .nav-links {
+        order: 3;
+        width: 100%;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 18px;
+    }
+
+    .hero {
+        padding: 60px 7%;
+        min-height: 400px;
+    }
+
+    .products-section {
+        padding: 50px 6%;
+    }
+
+    .product-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .product-image {
+        height: 280px;
+    }
+
+    .section-heading h2,
+    .about-section h2 {
+        font-size: 28px;
+    }
+}
+
+Step 4: Upload website files to your S3 bucket
+4.1 Open your S3 bucket
+Open the AWS Management Console.
+Search for S3 in the top search bar.
+Click Amazon S3.
+Open your website bucket.
+If you haven't created a separate website bucket yet, create one first. Use a unique bucket name, such as:
+elegance-website-demo-2026-387421310630
+Keep the bucket in the region you plan to use for hosting.
+4.2 Upload the website files
+Inside your bucket:
+Click Upload.
+Under Files and folders, click Add files.
+Select these three files from your Elegance-Website folder:
+index.html
+style.css
+script.js
+Click Add folder.
+Select the images folder if you have product images.
+Click Upload at the bottom of the page.
+Wait for the upload to complete.
+Click Close.
+Step 5: Enable Static Website Hosting
+5.1 Open Properties
+Return to your S3 bucket.
+Click the Properties tab.
+Scroll down to the bottom.
+Find the section called Static website hosting.
+5.2 Enable website hosting
+Click Edit.
+Under Static website hosting, select Enable.
+Under Hosting type, select Host a static website.
+In the Index document field, enter:
+index.html
+In the Error document field, you can enter:
+error.html
+This is optional. If you have not created an error page, leave it empty.
+Click Save changes.
+AWS should now display a Bucket website endpoint in the Static website hosting section.
+Don't open it yet—we need to configure the permissions first.
+Step 6: Allow public access to the website
+For the direct S3 website endpoint to work, website files must be publicly readable. This is only appropriate for a bucket containing files intended to be public.
+6.1 Edit Block Public Access
+Open your S3 bucket.
+Click the Permissions tab.
+Find Block public access (bucket settings).
+Click Edit.
+Uncheck Block all public access.
+Review the warning.
+Check the confirmation box if AWS asks you to acknowledge the change.
+Click Save changes.
+Keep this bucket limited to your public website files. Never upload private documents, passwords, credentials, or customer information here.
+If AWS prevents this change because of an account-level or lab-level restriction, don't try to bypass it. Tell me what the error says.
+6.2 Add a Bucket Policy
+Stay on the Permissions tab.
+Scroll down to Bucket policy.
+Click Edit.
+Paste the policy below.
+Replace YOUR_BUCKET_NAME with your exact bucket name.
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "PublicReadWebsiteFiles",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::YOUR_BUCKET_NAME/*"
+    }
+  ]
+}
+For example, if your bucket name is elegance-website-demo-2026-387421310630, the Resource line should be:
+"Resource": "arn:aws:s3:::elegance-website-demo-2026-387421310630/*"
+5. Click Save changes.
+If AWS says public policies are blocked, check whether Block Public Access is still enabled or whether your Learner Lab has an account-level restriction.
+Step 7: Open your website
+Return to your S3 bucket.
+Click Properties.
+Scroll to Static website hosting.
+Copy the Bucket website endpoint.
+Open it in a new browser tab.
+It will look similar to:
+http://your-bucket-name.s3-website.ap-south-1.amazonaws.com
+
+Practical 14: 
+Procedure
+Step 1: Create an S3 Bucket
+Open the AWS Management Console.
+Search for Amazon S3.
+Click Create bucket.
+Enter the bucket name:
+student-feedback-2026-387421310630
+Select the AWS Region as US East (N. Virginia) – us-east-1.
+Keep Block all public access enabled.
+Keep the remaining settings as default.
+Click Create bucket.
+The bucket was created successfully and used to store feedback data.
+Step 2: Configure IAM Permissions
+Open IAM → Roles.
+Attempt to create a role named StudentFeedbackLambdaRole.
+AWS Academy Learner Lab returned an access-denied error for iam:CreateRole.
+The existing Lambda role RoleForLambdaModLabRole was identified.
+The lab also restricted access to iam:GetRole and IAM Access Analyzer.
+Therefore, the practical was continued using the existing role available through the Lambda console.
+Note: AWS Academy may restrict IAM operations. In a normal AWS account, a Lambda execution role should have the required S3 permissions, such as s3:PutObject for storing feedback objects.
+Step 3: Create the Lambda Function
+Open AWS Lambda.
+Click Create function.
+Select Author from scratch.
+Enter the function name:
+StudentFeedbackManager
+Select the Python runtime available in the lab.
+Under Permissions, select Use an existing role.
+Select the available Lambda execution role.
+Click Create function.
+The Lambda function was created successfully.
+Step 4: Configure the Environment Variable
+Open the Lambda function.
+Navigate to Configuration → Environment variables.
+Click Edit → Add environment variable.
+Enter the following:
+Key
+Value
+BUCKET_NAME
+student-feedback-2026-387421310630
+
+5. Click Save.
+The environment variable allows the Lambda function to identify the S3 bucket where feedback will be stored.
+Step 5: Write the Lambda Function Code
+Open the Code tab.
+Open lambda_function.py.
+Replace the existing code with the following:
+import jsonimport boto3import osimport uuidfrom datetime import datetimes3 = boto3.client("s3")BUCKET_NAME = os.environ["BUCKET_NAME"]def lambda_handler(event, context):    try:        body = event.get("body", event)        if isinstance(body, str):            body = json.loads(body)        feedback = {            "feedback_id": str(uuid.uuid4()),            "name": body.get("name", "Anonymous"),            "course": body.get("course", ""),            "rating": body.get("rating", ""),            "comments": body.get("comments", ""),            "timestamp": datetime.utcnow().isoformat()        }        s3.put_object(            Bucket=BUCKET_NAME,            Key=f"feedback/{feedback['feedback_id']}.json",            Body=json.dumps(feedback),            ContentType="application/json"        )        return {            "statusCode": 200,            "headers": {                "Content-Type": "application/json"
+4. Click Deploy.
+The Lambda function processes feedback, generates a unique feedback ID, and stores the feedback as a JSON object in S3.
+Step 6: Test the Lambda Function
+Open the Lambda function.
+Click Test.
+Create a new test event named FeedbackTest.
+Enter the following JSON test data:
+{
+  "name": "Maanya",
+  "course": "MCA",
+  "rating": 5,
+  "comments": "The course was helpful."
+}
+Click Save.
+Click Test again.
+Test Result
+The Lambda function executed successfully.
+{
+  "statusCode": 200,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"message\": \"Feedback submitted successfully\", \"feedback_id\": \"588df35e-2354-44c8-8187-6c837e53ffa0\"}"
+}
+Status: Succeeded
+The function returned the message “Feedback submitted successfully” and generated a unique feedback ID.
+Step 7: Verify Feedback in Amazon S3
+Open Amazon S3.
+Open the bucket student-feedback-2026-387421310630.
+Open the feedback/ folder.
+Verify that a JSON file has been created.
+Open the JSON file to view the stored feedback.
+The object path was:
+feedback/588df35e-2354-44c8-8187-6c837e53ffa0.json
+The feedback was successfully stored in S3.
+Step 8: Create an API Using API Gateway
+Open Amazon API Gateway.
+Click Create API.
+Select HTTP API.
+Click Build.
+Under Integrations, select Add integration.
+Choose Lambda.
+Select the Lambda function StudentFeedbackManager.
+Enter the API name:
+StudentFeedbackAPI
+Click Next.
+Step 9: Configure the API Route
+Configure the API route as follows:
+Setting
+Value
+Method
+POST
+Resource path
+/feedback
+Integration
+StudentFeedbackManager
+
+
+Configure the route.
+Select the default stage if available.
+Enable auto-deploy if available.
+Create the API.
+Copy the API Invoke URL.
+The API endpoint will have the following format:
+https://<api-id>.execute-api.us-east-1.amazonaws.com/feedback
+The actual API ID and Invoke URL are generated by AWS.
+Step 10: Test the API
+The API can be tested using Postman or another HTTP client.
+Select the HTTP method as POST.
+Enter the API endpoint ending with /feedback.
+Select Body → raw → JSON.
+Enter the following request:
+{
+  "name": "Maanya",
+  "course": "MCA",
+  "rating": 5,
+  "comments": "The course was helpful."
+}
+5. Click Send.
+Expected response:
+{
+  "message": "Feedback submitted successfully",
+  "feedback_id": "<generated-feedback-id>"
+}
+A new JSON object should be created inside the S3 feedback/ folder.
+Practical status: Lambda processing and S3 storage have been tested successfully. API Gateway configuration and its HTTP test are the remaining steps to complete.
+Step 11: IAM Verification
+IAM is used to manage access between AWS services.
+The Lambda function uses an execution role.
+The execution role should allow the function to write feedback objects to S3.
+API Gateway requires permission to invoke the Lambda function.
+S3 objects are kept private by default.
+In AWS Academy Learner Lab, some IAM operations may be restricted. The existing lab role was used instead of creating a new IAM role.
+Step 12: Monitor Using CloudWatch
+Open AWS Lambda.
+Select StudentFeedbackManager.
+Open the Monitor tab.
+Click View CloudWatch logs.
+Open the latest log stream.
+CloudWatch provides information such as:
+Lambda execution status
+Request ID
+Execution duration
+Memory usage
+Errors, if any
+
